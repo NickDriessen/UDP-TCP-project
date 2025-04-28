@@ -76,24 +76,19 @@ int initialization() {
     return internet_socket;
 }
 
-void execution(int internet_socket) {
-    // Step 2.1
-    int number_of_bytes_received = 0;
-    char buffer[1000];
-    struct sockaddr_storage client_internet_address;
-    socklen_t client_internet_address_length = sizeof client_internet_address;
-    number_of_bytes_received = recvfrom(internet_socket, buffer, (sizeof buffer) - 1, 0, (struct sockaddr *) &client_internet_address, &client_internet_address_length);
+void listen_for_data(int internet_socket, struct sockaddr_storage *client_internet_address, socklen_t *client_internet_address_length, char *buffer, int buffer_size) {
+    int number_of_bytes_received = recvfrom(internet_socket, buffer, buffer_size - 1, 0, (struct sockaddr *) client_internet_address, client_internet_address_length);
     if (number_of_bytes_received == -1) {
         perror("recvfrom");
     } else {
         buffer[number_of_bytes_received] = '\0';
         printf("Received : %s\n", buffer);
     }
+}
 
-    // Step 2.2
-    int number_of_bytes_send = 0;
-    number_of_bytes_send = sendto(internet_socket, "Hello UDP world!", 16, 0, (struct sockaddr *) &client_internet_address, client_internet_address_length);
-    if (number_of_bytes_send == -1) {
+void send_response(int internet_socket, struct sockaddr_storage *client_internet_address, socklen_t client_internet_address_length, const char *response, int response_length) {
+    int number_of_bytes_sent = sendto(internet_socket, response, response_length, 0, (struct sockaddr *) client_internet_address, client_internet_address_length);
+    if (number_of_bytes_sent == -1) {
         perror("sendto");
     }
 }
