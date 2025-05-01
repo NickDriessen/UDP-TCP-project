@@ -4,6 +4,7 @@
 #include <time.h>
 #include "system_functions.h" // Include the header file
 
+#define WAIT_TIMEOUT_SECONDS 120
 #define INITIAL_TIMEOUT_SECONDS 8
 #define EXTENDED_TIMEOUT_SECONDS 16
 #define MAX_CLIENTS 100
@@ -15,10 +16,12 @@ typedef enum {
 	RESULT
 } ServerState;
 
-typedef struct {
+typedef struct ClientGuess {
 	struct sockaddr_storage address;
 	socklen_t address_length;
 	int guess;
+	int disqualified;
+	struct ClientGuess *next;
 } ClientGuess;
 
 int main(int argc, char *argv[]) {
@@ -30,8 +33,7 @@ int main(int argc, char *argv[]) {
 	ServerState currentState = INITIAL;
 
 	int randomNumber = 0;
-    ClientGuess clients[MAX_CLIENTS];
-    int clientCount = 0;
+	ClientGuess *clientListHead = NULL;
     int timeout = INITIAL_TIMEOUT_SECONDS;
 	int firstGuessReceived = 0;
 	int runGame = 1;
@@ -47,9 +49,6 @@ int main(int argc, char *argv[]) {
 				randomNumber = rand() % 100;	
 				printf("Generated random number: %d\n", randomNumber);
 
-				clientCount = 0;
-				memset(clients, 0, sizeof(clients));
-
                 timeout = INITIAL_TIMEOUT_SECONDS;
 				firstGuessReceived = 0;
 
@@ -61,87 +60,88 @@ int main(int argc, char *argv[]) {
 				FD_ZERO(&readfds);
 				FD_SET(internet_socket, &readfds);
 			
-				if (!firstGuessReceived) {
-					// Wait up to 2 minutes for the first guess
-					tv.tv_sec = 120; // 2 minutes
-					tv.tv_usec = 0;
+				tv.tv_sec = firstGuessReceived ? timeout : WAIT_TIMEOUT_SECONDS;
+				tv.tv_usec = 0;
 			
-					int selectResult = select(internet_socket + 1, &readfds, NULL, NULL, &tv);
-					if (selectResult > 0) {
-						if (FD_ISSET(internet_socket, &readfds)) {
-							struct sockaddr_storage client_internet_address;
-							socklen_t client_internet_address_length = sizeof(client_internet_address);
+				int selectResult = select(internet_socket + 1, &readfds, NULL, NULL, &tv);
 			
-							listen_for_data(internet_socket, &client_internet_address, &client_internet_address_length, buffer, sizeof(buffer));
+				if (selectResult > 0) {
+					if (FD_ISSET(internet_socket, &readfds)) {
+						struct sockaddr_storage client_internet_address;
+						memset(&client_internet_address, 0, sizeof(client_internet_address));
+						socklen_t client_internet_address_length = sizeof(client_internet_address);
 			
-							int guess = atoi(buffer);
+						listen_for_data(internet_socket, &client_internet_address, &client_internet_address_length, buffer, sizeof(buffer));
+			
+						int guess;
+						if (sscanf(buffer, "%d", &guess) == 1) {
 							printf("User guessed: %d\n", guess);
+						} else {
+							printf("Invalid guess\n");
+							break;
+						}
 			
-							int alreadyPlayed = 0;
-							for (int i = 0; i < clientCount; i++) {
-								if (memcmp(&clients[i].address, &client_internet_address, sizeof(struct sockaddr_storage)) == 0) {
-									alreadyPlayed = 1;
-									break;
-								}
+						int alreadyPlayed = 0;
+						ClientGuess *current = clientListHead;
+						while (current != NULL) {
+							if (memcmp(&current->address, &client_internet_address, sizeof(struct sockaddr_storage)) == 0) {
+								alreadyPlayed = 1;
+								break;
 							}
+							current = current->next;
+						}
 			
-							if (!alreadyPlayed && clientCount < MAX_CLIENTS) {
-								clients[clientCount].address = client_internet_address;
-								clients[clientCount].address_length = client_internet_address_length;
-								clients[clientCount].guess = guess;
-								clientCount++;
+						if (!alreadyPlayed) {
+							ClientGuess *newClient = malloc(sizeof(ClientGuess));
+							if (!newClient) {
+								perror("Memory allocation failed");
+								exit(1);
 							}
+							newClient->address = client_internet_address;
+							newClient->address_length = client_internet_address_length;
+							newClient->guess = guess;
+							newClient->disqualified = 0;
+							newClient->next = clientListHead;
+							clientListHead = newClient;
+						}
 			
-							// After first guess received, start normal timeout
+						if (!firstGuessReceived) {
 							firstGuessReceived = 1;
 							timeout = INITIAL_TIMEOUT_SECONDS;
-						}
-					} else if (selectResult == 0) {
-						// Timeout -> no first guess received
-						printf("No first guess received within 2 minutes. Shutting down server.\n");
-						// Exit main loop
-						runGame = 0;
-					} else {
-						perror("select error");
-						runGame = 0;
-					}
-				} else {
-					// After first guess, regular timeout handling
-					tv.tv_sec = timeout;
-					tv.tv_usec = 0;
-			
-					if (select(internet_socket + 1, &readfds, NULL, NULL, &tv) > 0) {
-						if (FD_ISSET(internet_socket, &readfds)) {
-							struct sockaddr_storage client_internet_address;
-							socklen_t client_internet_address_length = sizeof(client_internet_address);
-			
-							listen_for_data(internet_socket, &client_internet_address, &client_internet_address_length, buffer, sizeof(buffer));
-			
-							int guess = atoi(buffer);
-							printf("User guessed: %d\n", guess);
-			
-							int alreadyPlayed = 0;
-							for (int i = 0; i < clientCount; i++) {
-								if (memcmp(&clients[i].address, &client_internet_address, sizeof(struct sockaddr_storage)) == 0) {
-									alreadyPlayed = 1;
-									break;
-								}
-							}
-			
-							if (!alreadyPlayed && clientCount < MAX_CLIENTS) {
-								clients[clientCount].address = client_internet_address;
-								clients[clientCount].address_length = client_internet_address_length;
-								clients[clientCount].guess = guess;
-								clientCount++;
-							}
-			
+						} else {
 							timeout = INITIAL_TIMEOUT_SECONDS / 2;
 						}
+					}
+				} else if (selectResult == 0) {
+					if (!firstGuessReceived) {
+						printf("No first guess received within 2 minutes. Shutting down server.\n");
+						runGame = 0;
 					} else {
 						printf("Guessing timeout, moving to TIMEOUT phase\n");
-						firstGuessReceived = 0; // Reset for next round
+						firstGuessReceived = 0;
+
+						ClientGuess *potentialWinner = NULL;
+						int closestDiff = 1000;
+
+						ClientGuess *current = clientListHead;
+						while (current != NULL) {
+							int diff = abs(current->guess - randomNumber);
+							if (diff < closestDiff) {
+								closestDiff = diff;
+								potentialWinner = current;
+							}
+							current = current->next;
+						}
+
+						if (potentialWinner != NULL) {
+							send_response(internet_socket, &potentialWinner->address, potentialWinner->address_length, "You won?", strlen("You won?"));
+						}
+
 						currentState = TIMEOUT;
 					}
+				} else {
+					perror("select error");
+					runGame = 0;
 				}
 				break;
 			case TIMEOUT:
@@ -155,48 +155,63 @@ int main(int argc, char *argv[]) {
 					if (select(internet_socket + 1, &readfds, NULL, NULL, &tv) > 0) {
 						if (FD_ISSET(internet_socket, &readfds)) {
 							struct sockaddr_storage temp_client_address;
+							memset(&temp_client_address, 0, sizeof(temp_client_address));
 							socklen_t temp_client_address_length = sizeof(temp_client_address);
 							listen_for_data(internet_socket, &temp_client_address, &temp_client_address_length, buffer, sizeof(buffer));
 
 							int knownClient = 0;
-							for (int i = 0; i < clientCount; ++i) {
-								if (memcmp(&clients[i].address, &temp_client_address, sizeof(struct sockaddr_storage)) == 0) {
+							ClientGuess *current = clientListHead;
+							while (current != NULL) {
+								if (memcmp(&current->address, &temp_client_address, sizeof(struct sockaddr_storage)) == 0) {
 									knownClient = 1;
 									break;
 								}
+								current = current->next;
 							}
 
 							if (!knownClient) {
 								send_response(internet_socket, &temp_client_address, temp_client_address_length, "You lost!", strlen("You lost!"));
+							} else
+							{
+								current->disqualified = 1;
 							}
-							// else: known client, do nothing
 						}
 					} else {
-						break; // timeout, exit TIMEOUT phase
+						break;
 					}
 				}
 				currentState = RESULT;
 				break;
 			case RESULT:
-				// Determine the closest guess
-                int closestDiff = 1000;
-                int winnerIndex = -1;
-                for (int i = 0; i < clientCount; ++i) {
-                    int diff = abs(clients[i].guess - randomNumber);
-                    if (diff < closestDiff) {
-                        closestDiff = diff;
-                        winnerIndex = i;
-                    }
-                }
+				ClientGuess *winner = NULL;
+				int closestDiff = 1000;
+				
+				ClientGuess *current = clientListHead;
+				while (current != NULL) {
+					if (!current->disqualified) { // Only consider non-disqualified clients
+						int diff = abs(current->guess - randomNumber);
+						if (diff < closestDiff) {
+							closestDiff = diff;
+							winner = current;
+						}
+					}
+					current = current->next;
+				}
+				
+				// Stuur reactie naar alle clients
+				current = clientListHead;
+				while (current != NULL) {
+					if (current == winner) {
+						send_response(internet_socket, &current->address, current->address_length, "You won!", strlen("You won!"));
+					} else {
+						send_response(internet_socket, &current->address, current->address_length, "You lost!", strlen("You lost!"));
+					}
 
-                // Send response to all clients
-                for (int i = 0; i < clientCount; ++i) {
-                    if (i == winnerIndex) {
-                        send_response(internet_socket, &clients[i].address, clients[i].address_length, "You won!", strlen("You won!"));
-                    } else {
-                        send_response(internet_socket, &clients[i].address, clients[i].address_length, "You lost!", strlen("You lost!"));
-                    }
-                }
+					ClientGuess *temp = current;
+					current = current->next;
+					free(temp);
+				}
+				clientListHead = NULL;
 
                 currentState = INITIAL;
                 break;
