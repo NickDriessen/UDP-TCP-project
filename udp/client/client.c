@@ -6,11 +6,11 @@
 	#include <unistd.h> //for close
 	#include <stdlib.h> //for exit
 	#include <string.h> //for memset
-    #include <sys/time.h> //voor timer
+    #include <time.h> //voor timer
 	void OSInit( void )
 	{
 		WSADATA wsaData;
-		WSAStartup( MAKEWORD( 2, 0 ), &wsaData );
+		int WSAError = WSAStartup( MAKEWORD( 2, 0 ), &wsaData ); 
 		if( WSAError != 0 )
 		{
 			fprintf( stderr, "WSAStartup errno = %d\n" );
@@ -33,7 +33,7 @@
 	#include <unistd.h> //for close
 	#include <stdlib.h> //for exit
 	#include <string.h> //for memset
-    #include <sys/time.h> //voor timer
+    #include <time.h> //voor timer
 	void OSInit( void ) {}
 	void OSCleanup( void ) {}
 #endif
@@ -149,9 +149,28 @@ void execution( int internet_socket, struct sockaddr * internet_address, socklen
         perror("sendto");
     }
     
+    //Step 2.2
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(internet_socket, &readfds);
 
-	//Step 2.2
+    struct timeval timeout;
+    timeout.tv_sec = 16;
+    timeout.tv_usec = 0;
 
+    int ready = select(internet_socket + 1, &readfds, NULL, NULL, &timeout);
+    if (ready == -1)
+    {
+        perror("select");
+        return;
+    }
+    else if (ready == 0)
+    {
+        printf("You lost?\n");
+        return;
+    }
+
+    //Step 2.3
     int number_of_bytes_received = 0;
     char buffer[1000];
     number_of_bytes_received = recvfrom( internet_socket, buffer, ( sizeof buffer ) - 1, 0, internet_address, &internet_address_length );
