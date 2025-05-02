@@ -6,7 +6,7 @@
 	#include <unistd.h> //for close
 	#include <stdlib.h> //for exit
 	#include <string.h> //for memset
-    #include <time.h> //voor timer
+      #include <time.h> //voor timer
 	void OSInit( void )
 	{
 		WSADATA wsaData;
@@ -22,6 +22,8 @@
 		WSACleanup();
 	}
 	#define perror(string) fprintf( stderr, string ": WSA errno = %d\n", WSAGetLastError() )
+      #define CLOSESOCKET(s) closesocket(s)
+      #define SHUT_RECEIVE SD_RECEIVE
 #else
 	#include <sys/socket.h> //for sockaddr, socket, socket
 	#include <sys/types.h> //for size_t
@@ -148,41 +150,44 @@ void execution( int internet_socket, struct sockaddr * internet_address, socklen
     {
         perror("sendto");
     }
-    
-    //Step 2.2
-    fd_set readfds;
-    FD_ZERO(&readfds);
-    FD_SET(internet_socket, &readfds);
 
-    struct timeval timeout;
-    timeout.tv_sec = 16;
-    timeout.tv_usec = 0;
+    for (int i = 0; i < 2; i++)
+    {  
+        //Step 2.2
+		fd_set readfds;
+		FD_ZERO(&readfds);
+		FD_SET(internet_socket, &readfds);
 
-    int ready = select(internet_socket + 1, &readfds, NULL, NULL, &timeout);
-    if (ready == -1)
-    {
-        perror("select");
-        return;
-    }
-    else if (ready == 0)
-    {
-        printf("You lost?\n");
-        return;
-    }
+		struct timeval timeout;
+		timeout.tv_sec = 16;
+		timeout.tv_usec = 0;
 
-    //Step 2.3
-    int number_of_bytes_received = 0;
-    char buffer[1000];
-    number_of_bytes_received = recvfrom( internet_socket, buffer, ( sizeof buffer ) - 1, 0, internet_address, &internet_address_length );
-    if( number_of_bytes_received == -1 )
-    {
-        perror( "recvfrom" );
-    }
-    else
-    {
-        buffer[number_of_bytes_received] = '\0';
-        printf( "Received : %s\n", buffer );
-    }
+		int ready = select(internet_socket + 1, &readfds, NULL, NULL, &timeout);
+		if (ready == -1)
+		{
+			perror("select");
+			return;
+		}
+		else if (ready == 0)
+		{
+			printf("You lost?\n");
+			return;
+		}
+
+		//Step 2.3
+		int number_of_bytes_received = 0;
+		char buffer[1000];
+		number_of_bytes_received = recvfrom( internet_socket, buffer, ( sizeof buffer ) - 1, 0, internet_address, &internet_address_length );
+		if( number_of_bytes_received == -1 )
+		{
+			perror( "recvfrom" );
+		}
+		else
+		{
+			buffer[number_of_bytes_received] = '\0';
+			printf( "Received : %s\n", buffer );
+		}
+	}	
 }
 
 
