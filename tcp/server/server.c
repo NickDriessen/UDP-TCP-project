@@ -6,6 +6,8 @@
 	#include <unistd.h> //for close
 	#include <stdlib.h> //for exit
 	#include <string.h> //for memset
+	#include <stdint.h> //for int32_t
+	#include <time.h> //for random number
 	void OSInit( void )
 	{
 		WSADATA wsaData;
@@ -21,8 +23,6 @@
 		WSACleanup();
 	}
 	#define perror(string) fprintf( stderr, string ": WSA errno = %d\n", WSAGetLastError() )
-	#define CLOSESOCKET(s) closesocket(s)
-    #define SHUT_RECEIVE SD_RECEIVE
 #else
 	#include <sys/socket.h> //for sockaddr, socket, socket
 	#include <sys/types.h> //for size_t
@@ -34,16 +34,17 @@
 	#include <unistd.h> //for close
 	#include <stdlib.h> //for exit
 	#include <string.h> //for memset
+	#include <stdint.h> //for int32_t
+	#include <time.h> //for random number
 	void OSInit( void ) {}
 	void OSCleanup( void ) {}
-	#define CLOSESOCKET(s) close(s)
-    #define SHUT_RECEIVE SHUT_RD
+    #define SD_SEND SHUT_WR
 #endif
 
 int initialization();
-int connection( int internet_socket );
+//int connection( int internet_socket );
 void execution( int internet_socket );
-void cleanup( int internet_socket, int client_internet_socket );
+void cleanup( int internet_socket /*, int client_internet_socket*/ );
 
 int main( int argc, char * argv[] )
 {
@@ -59,20 +60,21 @@ int main( int argc, char * argv[] )
 	//Connection//
 	//////////////
 
-	int client_internet_socket = connection( internet_socket );
+	//int client_internet_socket = connection( internet_socket );
+
 
 	/////////////
 	//Execution//
 	/////////////
 
-	execution( client_internet_socket );
+	execution( internet_socket );
 
 
 	////////////
 	//Clean up//
 	////////////
 
-	cleanup( internet_socket, client_internet_socket );
+	cleanup( internet_socket /*,client_internet_socket*/);
 
 	OSCleanup();
 
@@ -85,10 +87,10 @@ int initialization()
 	struct addrinfo internet_address_setup;
 	struct addrinfo * internet_address_result;
 	memset( &internet_address_setup, 0, sizeof internet_address_setup );
-	internet_address_setup.ai_family = AF_UNSPEC;
+	internet_address_setup.ai_family = AF_INET; //gets ip4 only cuz other no worky :/
 	internet_address_setup.ai_socktype = SOCK_STREAM;
 	internet_address_setup.ai_flags = AI_PASSIVE;
-	int getaddrinfo_return = getaddrinfo( NULL, "24041", &internet_address_setup, &internet_address_result );
+	int getaddrinfo_return = getaddrinfo( NULL, "24042", &internet_address_setup, &internet_address_result );
 	if( getaddrinfo_return != 0 )
 	{
 		fprintf( stderr, "getaddrinfo: %s\n", gai_strerror( getaddrinfo_return ) );
@@ -117,7 +119,7 @@ int initialization()
 			else
 			{
 				//Step 1.4
-				int listen_return = listen( internet_socket, 1 );
+				int listen_return = listen( internet_socket, 10 );
 				if( listen_return == -1 )
 				{
 					close( internet_socket );
@@ -143,7 +145,7 @@ int initialization()
 	return internet_socket;
 }
 
-int connection( int internet_socket )
+/*int connection( int internet_socket )
 {
 	//Step 2.1
 	struct sockaddr_storage client_internet_address;
@@ -156,43 +158,108 @@ int connection( int internet_socket )
 		exit( 3 );
 	}
 	return client_socket;
-}
+}*/
 
 void execution( int internet_socket )
 {
-	//Step 3.1
-	int number_of_bytes_received = 0;
-	char buffer[1000];
-	number_of_bytes_received = recv( internet_socket, buffer, ( sizeof buffer ) - 1, 0 );
-	if( number_of_bytes_received == -1 )
-	{
-		perror( "recv" );
-	}
-	else
-	{
-		buffer[number_of_bytes_received] = '\0';
-		printf( "Received : %s\n", buffer );
-	}
+	fd_set current_sockets, ready_socket;
+	int fdmax = internet_socket;
 
-	//Step 3.2
-	int number_of_bytes_send = 0;
-	number_of_bytes_send = send( internet_socket, "Hello TCP world!", 16, 0 );
-	if( number_of_bytes_send == -1 )
-	{
-		perror( "send" );
+	FD_ZERO(&current_sockets);
+	FD_SET(internet_socket, &current_sockets);
+
+	srand(time(NULL));
+	long int secret_number = ((rand() << 15) | rand()) % 1000001;
+	printf("Number = %ld\n", secret_number);
+
+	while (1)
+	{	
+		ready_socket = current_sockets;
+
+		if (select(fdmax + 1, &ready_socket, NULL, NULL, NULL) < 0)
+		{
+			perror("select");
+			exit( 4 );
+		}
+
+		for (int i = 0; i <= fdmax; i++)
+		{
+			if (FD_ISSET(i, &ready_socket))
+			{
+				if (i == internet_socket)
+				{
+					struct sockaddr_in client_addr;
+					socklen_t client_len = sizeof(client_addr);
+					int new_fd = accept(internet_socket, (struct sockaddr *)&client_addr, &client_len);
+					if (new_fd < 0) 
+					{
+						perror("accept");
+						exit( 5 );
+					}
+					FD_SET(new_fd, &current_sockets);
+					if (new_fd > fdmax)
+					{
+						fdmax = new_fd;
+					}
+				}
+				else
+				{
+					//step 3.2
+					int32_t client_guess_network;
+					int number_of_bytes_sent;
+
+					//step 3.3
+					int number_of_bytes_received = recv(i, (char *)&client_guess_network, sizeof(client_guess_network), 0);
+					if (number_of_bytes_received <= 0)
+					{
+						close(i);
+						FD_CLR(i, &current_sockets);
+					}
+					else
+					{
+						int32_t client_guess_host = ntohl(client_guess_network);
+						printf("client %d guessed: %d\n", i, client_guess_host);
+
+						//step 3.4
+						const char *response;
+						if (client_guess_host < secret_number)
+						{
+							response = "Hoger\n";
+						}
+						else if (client_guess_host > secret_number)
+						{
+							response = "Lager\n";
+						}
+						else
+						{
+							response = "Correct\n";
+							secret_number = ((rand() << 15) | rand()) % 1000001;
+							printf("Number = %ld\n", secret_number);
+						}
+
+						//step 3.5
+						number_of_bytes_sent = send(i, response, strlen(response), 0);
+						if (number_of_bytes_sent == -1)
+						{
+							perror("send");
+							exit( 7 );
+						}
+					}
+				}	
+			}
+		}
 	}
 }
 
-void cleanup( int internet_socket, int client_internet_socket )
+void cleanup( int internet_socket /*, int client_internet_socket*/ )
 {
-	//Step 4.2
-	int shutdown_return = shutdown( client_internet_socket, SHUT_RECEIVE );
+	/*/Step 4.2
+	int shutdown_return = shutdown( client_internet_socket, SD_SEND );
 	if( shutdown_return == -1 )
 	{
 		perror( "shutdown" );
 	}
-
 	//Step 4.1
-	close( client_internet_socket );
+	close( client_internet_socket ); */
 	close( internet_socket );
 }
