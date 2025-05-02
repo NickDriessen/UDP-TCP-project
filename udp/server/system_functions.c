@@ -1,12 +1,11 @@
-#include "system_functions.h" // Include the header file
+#include "system_functions.h" 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
 #include <unistd.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <errno.h>
 #endif
 
@@ -37,7 +36,7 @@ int initialization() {
     struct addrinfo internet_address_setup;
     struct addrinfo *internet_address_result;
     memset(&internet_address_setup, 0, sizeof internet_address_setup);
-    internet_address_setup.ai_family = AF_INET6; // AF_INET6; //AF_UNSPEC;
+    internet_address_setup.ai_family = AF_INET; // AF_INET6; //AF_UNSPEC;
     internet_address_setup.ai_socktype = SOCK_DGRAM;
     internet_address_setup.ai_flags = AI_PASSIVE;
     int getaddrinfo_return = getaddrinfo(NULL, "24042", &internet_address_setup, &internet_address_result);

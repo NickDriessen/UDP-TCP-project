@@ -2,7 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "system_functions.h" // Include the header file
+
+#include "system_functions.h"
 
 #define WAIT_TIMEOUT_SECONDS 120
 #define INITIAL_TIMEOUT_SECONDS 8
@@ -43,8 +44,8 @@ int main(int argc, char *argv[]) {
 
 	while(runGame)
 	{
-		switch(currentState){
-			case INITIAL:
+		switch(currentState) {
+			case INITIAL: {
 				srand(time(NULL));
 				randomNumber = rand() % 100;	
 				printf("Generated random number: %d\n", randomNumber);
@@ -54,8 +55,8 @@ int main(int argc, char *argv[]) {
 
 				currentState = AWAITING_GUESS;
 				break;
-
-			case AWAITING_GUESS:
+			}
+			case AWAITING_GUESS: {
 
 				FD_ZERO(&readfds);
 				FD_SET(internet_socket, &readfds);
@@ -144,7 +145,8 @@ int main(int argc, char *argv[]) {
 					runGame = 0;
 				}
 				break;
-			case TIMEOUT:
+			}
+			case TIMEOUT: {
 				time_t timeoutStart = time(NULL);
 				while (time(NULL) - timeoutStart < EXTENDED_TIMEOUT_SECONDS) {
 					FD_ZERO(&readfds);
@@ -182,7 +184,8 @@ int main(int argc, char *argv[]) {
 				}
 				currentState = RESULT;
 				break;
-			case RESULT:
+			}
+			case RESULT: {
 				ClientGuess *winner = NULL;
 				int closestDiff = 1000;
 				
@@ -215,6 +218,7 @@ int main(int argc, char *argv[]) {
 
                 currentState = INITIAL;
                 break;
+			}
 		}
 	}
 
