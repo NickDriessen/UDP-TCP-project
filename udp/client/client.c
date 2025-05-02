@@ -10,7 +10,7 @@
 	void OSInit( void )
 	{
 		WSADATA wsaData;
-		int WSAError = WSAStartup( MAKEWORD( 2, 0 ), &wsaData ); 
+		int WSAError = WSAStartup( MAKEWORD( 2, 0 ), &wsaData );
 		if( WSAError != 0 )
 		{
 			fprintf( stderr, "WSAStartup errno = %d\n" );
@@ -80,9 +80,9 @@ int initialization( struct sockaddr ** internet_address, socklen_t * internet_ad
 	struct addrinfo internet_address_setup;
 	struct addrinfo * internet_address_result;
 	memset( &internet_address_setup, 0, sizeof internet_address_setup );
-	internet_address_setup.ai_family = AF_UNSPEC;
+	internet_address_setup.ai_family = AF_INET;
 	internet_address_setup.ai_socktype = SOCK_DGRAM;
-	int getaddrinfo_return = getaddrinfo( "::1", "24042", &internet_address_setup, &internet_address_result );
+	int getaddrinfo_return = getaddrinfo( "::1", "24043", &internet_address_setup, &internet_address_result );
 	if( getaddrinfo_return != 0 )
 	{
 		fprintf( stderr, "getaddrinfo: %s\n", gai_strerror( getaddrinfo_return ) );
@@ -152,8 +152,8 @@ void execution( int internet_socket, struct sockaddr * internet_address, socklen
     }
 
     for (int i = 0; i < 2; i++)
-    {  
-        //Step 2.2
+    {
+	        //Step 2.2
 		fd_set readfds;
 		FD_ZERO(&readfds);
 		FD_SET(internet_socket, &readfds);
@@ -187,7 +187,7 @@ void execution( int internet_socket, struct sockaddr * internet_address, socklen
 			buffer[number_of_bytes_received] = '\0';
 			printf( "Received : %s\n", buffer );
 		}
-	}	
+	}
 }
 
 
