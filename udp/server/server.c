@@ -118,7 +118,7 @@ int main(int argc, char *argv[]) {
 						printf("No first guess received within 2 minutes. Shutting down server.\n");
 						runGame = 0;
 					} else {
-						printf("Guessing timeout, moving to TIMEOUT phase\n");
+						printf("moving to TIMEOUT phase\n");
 						firstGuessReceived = 0;
 
 						ClientGuess *potentialWinner = NULL;
