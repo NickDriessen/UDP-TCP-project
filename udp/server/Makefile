@@ -1,28 +1,36 @@
-# Makefile for UDP Server
+# Makefile for UDP Server (Cross-platform: Linux/Windows with mingw32-make support)
 
 # Compiler
 CC = gcc
 
 # Compiler flags
-CFLAGS = -Wall -Werror  # Add more flags as needed, e.g., -g for debugging
+CFLAGS = -Wall -Werror
 
 # Source files
 SERVER_SRC = server.c
 SYSTEM_SRC = system_functions.c
 
 # Object files
-SERVER_OBJ = $(SERVER_SRC:.c=.o)
-SYSTEM_OBJ = $(SYSTEM_SRC:.c=.o)
+SERVER_OBJ = server.o
+SYSTEM_OBJ = system_functions.o
 
-# Executable name
-TARGET = server
+# OS-specific settings
+ifeq ($(OS),Windows_NT)
+    TARGET = server.exe
+    RM = cmd /C del /Q
+    LDLIBS = -lws2_32
+else
+    TARGET = server
+    RM = rm -f
+    LDLIBS =
+endif
 
 # Default rule: Build the executable
 all: $(TARGET)
 
 # Rule to link the object files to create the executable
 $(TARGET): $(SERVER_OBJ) $(SYSTEM_OBJ)
-	$(CC) $(SERVER_OBJ) $(SYSTEM_OBJ) -o $(TARGET)
+	$(CC) $(CFLAGS) $(SERVER_OBJ) $(SYSTEM_OBJ) -o $(TARGET) $(LDLIBS)
 
 # Rule to compile server.c to server.o
 $(SERVER_OBJ): $(SERVER_SRC)
@@ -34,6 +42,6 @@ $(SYSTEM_OBJ): $(SYSTEM_SRC)
 
 # Clean rule: Remove object files and the executable
 clean:
-	rm -f $(SERVER_OBJ) $(SYSTEM_OBJ) $(TARGET)
+	$(RM) $(SERVER_OBJ) $(SYSTEM_OBJ) $(TARGET)
 
-.PHONY: all clean  # Declare 'all' and 'clean' as phony targets
+.PHONY: all clean
