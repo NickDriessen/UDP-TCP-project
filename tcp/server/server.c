@@ -44,7 +44,7 @@
 int initialization();
 //int connection( int internet_socket );
 void execution( int internet_socket );
-void cleanup( int internet_socket /*, int client_internet_socket*/ );
+void cleanup( int internet_socket );
 
 int main( int argc, char * argv[] )
 {
@@ -56,16 +56,9 @@ int main( int argc, char * argv[] )
 
 	int internet_socket = initialization();
 
-	//////////////
-	//Connection//
-	//////////////
-
-	//int client_internet_socket = connection( internet_socket );
-
-
-	/////////////
-	//Execution//
-	/////////////
+	//////////////////////////
+	//Connection & Execution//
+	//////////////////////////
 
 	execution( internet_socket );
 
@@ -74,7 +67,7 @@ int main( int argc, char * argv[] )
 	//Clean up//
 	////////////
 
-	cleanup( internet_socket /*,client_internet_socket*/);
+	cleanup( internet_socket );
 
 	OSCleanup();
 
@@ -119,7 +112,7 @@ int initialization()
 			else
 			{
 				//Step 1.4
-				int listen_return = listen( internet_socket, 10 );
+				int listen_return = listen( internet_socket, 1 );
 				if( listen_return == -1 )
 				{
 					close( internet_socket );
@@ -145,21 +138,6 @@ int initialization()
 	return internet_socket;
 }
 
-/*int connection( int internet_socket )
-{
-	//Step 2.1
-	struct sockaddr_storage client_internet_address;
-	socklen_t client_internet_address_length = sizeof client_internet_address;
-	int client_socket = accept( internet_socket, (struct sockaddr *) &client_internet_address, &client_internet_address_length );
-	if( client_socket == -1 )
-	{
-		perror( "accept" );
-		close( internet_socket );
-		exit( 3 );
-	}
-	return client_socket;
-}*/
-
 void execution( int internet_socket )
 {
 	fd_set current_sockets, ready_socket;
@@ -169,8 +147,12 @@ void execution( int internet_socket )
 	FD_SET(internet_socket, &current_sockets);
 
 	srand(time(NULL));
-	long int secret_number = ((rand() << 15) | rand()) % 1000001;
-	printf("Number = %ld\n", secret_number);
+	long int secret_number[FD_SETSIZE];
+
+	for (int j = 0; j <= FD_SETSIZE; j++) 
+	{
+		secret_number[j] = -1;
+	}
 
 	while (1)
 	{	
@@ -217,24 +199,29 @@ void execution( int internet_socket )
 					}
 					else
 					{
+						if (secret_number[i] > 1000000 || secret_number[i] < 0)
+						{
+							secret_number[i] = ((rand() << 15) | rand()) % 1000001;
+							printf("client %d number = %ld\n", i, secret_number[i]);
+						}
 						int32_t client_guess_host = ntohl(client_guess_network);
 						printf("client %d guessed: %d\n", i, client_guess_host);
 
 						//step 3.4
 						const char *response;
-						if (client_guess_host < secret_number)
+						if (client_guess_host < secret_number[i])
 						{
 							response = "Hoger\n";
 						}
-						else if (client_guess_host > secret_number)
+						else if (client_guess_host > secret_number[i])
 						{
 							response = "Lager\n";
 						}
 						else
 						{
 							response = "Correct\n";
-							secret_number = ((rand() << 15) | rand()) % 1000001;
-							printf("Number = %ld\n", secret_number);
+							secret_number[i] = ((rand() << 15) | rand()) % 1000001;
+							printf("client %d number = %ld\n", i, secret_number[i]);
 						}
 
 						//step 3.5
@@ -251,15 +238,7 @@ void execution( int internet_socket )
 	}
 }
 
-void cleanup( int internet_socket /*, int client_internet_socket*/ )
+void cleanup( int internet_socket )
 {
-	/*/Step 4.2
-	int shutdown_return = shutdown( client_internet_socket, SD_SEND );
-	if( shutdown_return == -1 )
-	{
-		perror( "shutdown" );
-	}
-	//Step 4.1
-	close( client_internet_socket ); */
 	close( internet_socket );
 }
