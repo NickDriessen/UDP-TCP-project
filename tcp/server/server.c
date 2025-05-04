@@ -43,7 +43,7 @@
 
 int initialization();
 //int connection( int internet_socket );
-void execution( int internet_socket );
+void con_exe( int internet_socket );
 void cleanup( int internet_socket );
 
 int main( int argc, char * argv[] )
@@ -57,10 +57,10 @@ int main( int argc, char * argv[] )
 	int internet_socket = initialization();
 
 	//////////////////////////
-	//Connection & Execution//
+	//Connection & execution//
 	//////////////////////////
 
-	execution( internet_socket );
+	con_exe( internet_socket );
 
 
 	////////////
@@ -138,25 +138,27 @@ int initialization()
 	return internet_socket;
 }
 
-void execution( int internet_socket )
+void con_exe( int internet_socket )
 {
+	// File descriptor sets for select
 	fd_set current_sockets, ready_socket;
 	int fdmax = internet_socket;
 
 	FD_ZERO(&current_sockets);
-	FD_SET(internet_socket, &current_sockets);
+	FD_SET(internet_socket, &current_sockets); // Add server socket to set
+ 
+	srand(time(NULL)); // Seed random number generator
 
-	srand(time(NULL));
+	// Array to store secret number for each client socket
 	long int secret_number[FD_SETSIZE];
-
 	for (int j = 0; j <= FD_SETSIZE; j++) 
 	{
-		secret_number[j] = -1;
+		secret_number[j] = -1; // Initialize with invalid value
 	}
 
 	while (1)
 	{	
-		ready_socket = current_sockets;
+		ready_socket = current_sockets; // Copy set for select()
 
 		if (select(fdmax + 1, &ready_socket, NULL, NULL, NULL) < 0)
 		{
@@ -164,12 +166,14 @@ void execution( int internet_socket )
 			exit( 4 );
 		}
 
+		// Loop over all possible descriptors
 		for (int i = 0; i <= fdmax; i++)
 		{
-			if (FD_ISSET(i, &ready_socket))
+			if (FD_ISSET(i, &ready_socket)) // Check if descriptor is ready
 			{
 				if (i == internet_socket)
 				{
+					// New client connection
 					struct sockaddr_in client_addr;
 					socklen_t client_len = sizeof(client_addr);
 					int new_fd = accept(internet_socket, (struct sockaddr *)&client_addr, &client_len);
@@ -178,7 +182,7 @@ void execution( int internet_socket )
 						perror("accept");
 						exit( 5 );
 					}
-					FD_SET(new_fd, &current_sockets);
+					FD_SET(new_fd, &current_sockets); // Add client socket to set
 					if (new_fd > fdmax)
 					{
 						fdmax = new_fd;
@@ -186,45 +190,49 @@ void execution( int internet_socket )
 				}
 				else
 				{
-					//step 3.2
+					// Existing client sent a guess
 					int32_t client_guess_network;
 					int number_of_bytes_sent;
 
-					//step 3.3
+					// Receive guess from client
 					int number_of_bytes_received = recv(i, (char *)&client_guess_network, sizeof(client_guess_network), 0);
 					if (number_of_bytes_received <= 0)
 					{
+						// Client disconnected or error
 						close(i);
 						FD_CLR(i, &current_sockets);
 					}
 					else
 					{
+						// Assign secret number if not already assigned
 						if (secret_number[i] > 1000000 || secret_number[i] < 0)
 						{
 							secret_number[i] = ((rand() << 15) | rand()) % 1000001;
 							printf("client %d number = %ld\n", i, secret_number[i]);
 						}
+						// Convert guess to host byte order
 						int32_t client_guess_host = ntohl(client_guess_network);
 						printf("client %d guessed: %d\n", i, client_guess_host);
 
-						//step 3.4
+						// Compare guess with secret number
 						const char *response;
 						if (client_guess_host < secret_number[i])
 						{
-							response = "Hoger\n";
+							response = "Hoger\n"; // Guess is too low
 						}
 						else if (client_guess_host > secret_number[i])
 						{
-							response = "Lager\n";
+							response = "Lager\n"; // Guess is too high
 						}
 						else
 						{
-							response = "Correct\n";
+							response = "Correct\n"; // Guess is correct
+							// Generate new number for this client
 							secret_number[i] = ((rand() << 15) | rand()) % 1000001;
 							printf("client %d number = %ld\n", i, secret_number[i]);
 						}
 
-						//step 3.5
+						// Send result back to client
 						number_of_bytes_sent = send(i, response, strlen(response), 0);
 						if (number_of_bytes_sent == -1)
 						{
@@ -240,5 +248,5 @@ void execution( int internet_socket )
 
 void cleanup( int internet_socket )
 {
-	close( internet_socket );
+	close( internet_socket ); // Close listening socket
 }
